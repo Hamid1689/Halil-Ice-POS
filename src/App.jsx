@@ -339,16 +339,6 @@ const executeSendOrderToKitchen = async () => {
     }
   };
 
-  const completeDeptPart = async (orderId, currentCompletedDepts, deptName) => {
-    try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        completedDepts: [...currentCompletedDepts, deptName]
-      });
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   // Добавление расхода
   const handleAddExpense = async (e) => {
     e.preventDefault();
