@@ -1,18 +1,10 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-
-// Твои настройки из консоли Firebase (замени на свои актуальные данные)
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "ТВОЙ_API_KEY",
-  authDomain: "ТВОЙ_AUTH_DOMAIN",
-  projectId: "ТВОЙ_PROJECT_ID",
-  storageBucket: "ТВОЙ_STORAGE_BUCKET",
-  messagingSenderId: "ТВОЙ_MESSAGING_SENDER_ID",
-  appId: "ТВОЙ_APP_ID"
+  apiKey: "AIzaSyDiWBt-tjJ-dsmFsshbZ97To9pgWXmGHMk",
+  authDomain: "halil-ice.firebaseapp.com",
+  projectId: "halil-ice",
+  storageBucket: "halil-ice.firebasestorage.app",
+  messagingSenderId: "896191058330",
+  appId: "1:896191058330:web:1274d29592bc8233416a23",
+  measurementId: "G-PHMF2B3FP5"
 };
-
-// Инициализируем Firebase
-const app = initializeApp(firebaseConfig);
-
-// Экспортируем базу данных для использования в приложении
-export const db = getFirestore(app);

@@ -55,6 +55,22 @@ export default function App() {
 
   const tables = Array.from({ length: 23 }, (_, i) => `Стол ${i + 1}`).concat('С собой');
 
+  // 👇 ВСТАВЛЯЕМ НАШ СЛУШАТЕЛЬ БАЗЫ ДАННЫХ СЮДА:
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
+      const loadedOrders = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      // Как только в Firebase что-то меняется, мы обновляем state
+      setOrders(loadedOrders);
+    });
+
+    // Отключаемся от базы, если закроем приложение
+    return () => unsubscribe();
+  }, []);
+  // 👆 КОНЕЦ ВСТАВКИ
+
   // Подписка на заказы и расходы в реальном времени
   useEffect(() => {
     const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
@@ -96,6 +112,70 @@ export default function App() {
     setIsCartModalOpen(false);
     setIsConfirmSendModalOpen(false);
     setViewingBillOrder(null);
+  };
+
+  const executeSendOrderToKitchen = async () => {
+    if (cart.length === 0) return;
+
+    const newOrder = {
+      table: selectedTable,
+      waiter: currentUser.name,
+      items: cart,
+      status: 'open',
+      createdAt: Date.now(), 
+      time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+      completedDepts: [],
+      pickedUpDepts: [],
+      total: cartTotal
+    };
+
+    try {
+      await addDoc(collection(db, "orders"), newOrder);
+      setCart([]);
+      setIsCartModalOpen(false);
+      setIsConfirmSendModalOpen(false);
+    } catch (error) {
+      console.error("Ошибка при отправке:", error);
+      alert("Ошибка отправки заказа.");
+    }
+  };
+
+  // 2. Кухня отмечает "Готово"
+  const completeDeptPart = async (orderId, currentCompletedDepts, dept) => {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+      await updateDoc(orderRef, {
+        completedDepts: [...(currentCompletedDepts || []), dept]
+      });
+    } catch (error) {
+      console.error("Ошибка:", error);
+    }
+  };
+
+  // 3. Официант отмечает "Забрал"
+  const handleWaiterPickUp = async (orderId, currentPickedUpDepts, dept) => {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+      await updateDoc(orderRef, {
+        pickedUpDepts: [...(currentPickedUpDepts || []), dept]
+      });
+    } catch (error) {
+      console.error("Ошибка:", error);
+    }
+  };
+
+  // 4. Оплата чека
+  const closeOrderDirectly = async (orderToClose) => {
+    try {
+      const orderRef = doc(db, "orders", orderToClose.id);
+      await updateDoc(orderRef, {
+        status: 'closed',
+        closedTime: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+      });
+      setViewingBillOrder(null);
+    } catch (error) {
+      console.error("Ошибка:", error);
+    }
   };
 
   // При клике на стол
