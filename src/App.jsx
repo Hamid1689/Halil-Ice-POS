@@ -114,29 +114,44 @@ export default function App() {
     setViewingBillOrder(null);
   };
 
-  const executeSendOrderToKitchen = async () => {
+const executeSendOrderToKitchen = async () => {
     if (cart.length === 0) return;
 
-    const newOrder = {
-      table: selectedTable,
-      waiter: currentUser.name,
-      items: cart,
-      status: 'open',
-      createdAt: Date.now(), 
-      time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-      completedDepts: [],
-      pickedUpDepts: [],
-      total: cartTotal
-    };
-
     try {
+      // 1. Очищаем блюда от возможных undefined-полей
+      const sanitizedItems = cart.map(item => ({
+        id: item.id || Date.now(),
+        name: item.name || 'Блюдо',
+        price: Number(item.price) || 0,
+        dept: item.dept || 'Кухня',
+        category: item.category || 'Общее',
+        quantity: item.quantity || 1
+      }));
+
+      // 2. Собираем объект заказа с гарантированными значениями
+      const newOrder = {
+        table: selectedTable || 'Без стола',
+        waiter: currentUser?.name || 'Официант',
+        items: sanitizedItems,
+        status: 'open',
+        createdAt: Date.now(), 
+        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+        completedDepts: [],
+        pickedUpDepts: [],
+        total: Number(cartTotal) || 0
+      };
+
+      // 3. Отправляем в Firebase
       await addDoc(collection(db, "orders"), newOrder);
+
       setCart([]);
       setIsCartModalOpen(false);
       setIsConfirmSendModalOpen(false);
+
     } catch (error) {
       console.error("Ошибка при отправке:", error);
-      alert("Ошибка отправки заказа.");
+      // Если что-то пойдет не так — мы увидим ТОЧНЫЙ текст ошибки на экране
+      alert("❌ Ошибка отправки: " + error.message);
     }
   };
 
