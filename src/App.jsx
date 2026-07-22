@@ -55,22 +55,6 @@ export default function App() {
 
   const tables = Array.from({ length: 23 }, (_, i) => `Стол ${i + 1}`).concat('С собой');
 
-  // 👇 ВСТАВЛЯЕМ НАШ СЛУШАТЕЛЬ БАЗЫ ДАННЫХ СЮДА:
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "orders"), (snapshot) => {
-      const loadedOrders = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      // Как только в Firebase что-то меняется, мы обновляем state
-      setOrders(loadedOrders);
-    });
-
-    // Отключаемся от базы, если закроем приложение
-    return () => unsubscribe();
-  }, []);
-  // 👆 КОНЕЦ ВСТАВКИ
-
   // Подписка на заказы и расходы в реальном времени
   useEffect(() => {
     const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
@@ -114,80 +98,13 @@ export default function App() {
     setViewingBillOrder(null);
   };
 
-const executeSendOrderToKitchen = async () => {
-    if (cart.length === 0) return;
-
-    try {
-      // 1. Очищаем блюда от возможных undefined-полей
-      const sanitizedItems = cart.map(item => ({
-        id: item.id || Date.now(),
-        name: item.name || 'Блюдо',
-        price: Number(item.price) || 0,
-        dept: item.dept || 'Кухня',
-        category: item.category || 'Общее',
-        quantity: item.quantity || 1
-      }));
-
-      // 2. Собираем объект заказа с гарантированными значениями
-      const newOrder = {
-        table: selectedTable || 'Без стола',
-        waiter: currentUser?.name || 'Официант',
-        items: sanitizedItems,
-        status: 'open',
-        createdAt: Date.now(), 
-        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-        completedDepts: [],
-        pickedUpDepts: [],
-        total: Number(cartTotal) || 0
-      };
-
-      // 3. Отправляем в Firebase
-      await addDoc(collection(db, "orders"), newOrder);
-
-      setCart([]);
-      setIsCartModalOpen(false);
-      setIsConfirmSendModalOpen(false);
-
-    } catch (error) {
-      console.error("Ошибка при отправке:", error);
-      // Если что-то пойдет не так — мы увидим ТОЧНЫЙ текст ошибки на экране
-      alert("❌ Ошибка отправки: " + error.message);
-    }
-  };
-
-  // 2. Кухня отмечает "Готово"
+  // Кухня отмечает "Готово"
   const completeDeptPart = async (orderId, currentCompletedDepts, dept) => {
     try {
       const orderRef = doc(db, "orders", orderId);
       await updateDoc(orderRef, {
         completedDepts: [...(currentCompletedDepts || []), dept]
       });
-    } catch (error) {
-      console.error("Ошибка:", error);
-    }
-  };
-
-  // 3. Официант отмечает "Забрал"
-  const handleWaiterPickUp = async (orderId, currentPickedUpDepts, dept) => {
-    try {
-      const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, {
-        pickedUpDepts: [...(currentPickedUpDepts || []), dept]
-      });
-    } catch (error) {
-      console.error("Ошибка:", error);
-    }
-  };
-
-  // 4. Оплата чека
-  const closeOrderDirectly = async (orderToClose) => {
-    try {
-      const orderRef = doc(db, "orders", orderToClose.id);
-      await updateDoc(orderRef, {
-        status: 'closed',
-        closedTime: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-      });
-      setViewingBillOrder(null);
     } catch (error) {
       console.error("Ошибка:", error);
     }
@@ -262,6 +179,7 @@ const executeSendOrderToKitchen = async () => {
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  // Отправка заказа на кухню (создание нового чека или обновление существующего)
   const executeSendOrderToKitchen = async () => {
     if (!selectedTable || cart.length === 0) return;
 
@@ -312,12 +230,11 @@ const executeSendOrderToKitchen = async () => {
     }
   };
 
-  // ⚡⚡ ОБНОВЛЕННАЯ ФУНКЦИЯ: МГНОВЕННОЕ ЗАКРЫТИЕ ОКНА И РАСЧЕТ СТОЛА ⚡⚡
+  // Мгновенное закрытие окна и расчет стола
   const closeOrderDirectly = async (orderToClose) => {
     if (!orderToClose) return;
     if (window.confirm(`💰 Рассчитать гостей и очистить ${orderToClose.table}?\nИтого к оплате: ${orderToClose.total} сом`)) {
       
-      // 1. МГНОВЕННО скрываем все окна и обновляем интерфейс локально
       setViewingBillOrder(null);
       setCart([]);
       setActiveOrderId(null);
@@ -325,7 +242,6 @@ const executeSendOrderToKitchen = async () => {
       setIsCartModalOpen(false);
       setWaiterScreen('tables');
 
-      // 2. Выполняем запись в базу данных на заднем плане (не блокируя UI)
       try {
         await updateDoc(doc(db, 'orders', orderToClose.id), { 
           status: 'closed',
