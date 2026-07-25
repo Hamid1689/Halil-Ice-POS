@@ -19,43 +19,41 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Навигация: 'tables' | 'order' | 'monitor' | 'expenses' | 'report' | 'admin_dept_...'
   const [waiterScreen, setWaiterScreen] = useState('tables');
   
-  // Состояния для чека и заказа
   const [activeDept, setActiveDept] = useState(departments.FASTFOOD);
   const [selectedCategory, setSelectedCategory] = useState('Все');
   const [cart, setCart] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null); 
   const [activeOrderId, setActiveOrderId] = useState(null); 
   
-  // Поиск и фильтрация столов
   const [tableSearchQuery, setTableSearchQuery] = useState('');
-  const [tableFilterType, setTableFilterType] = useState('ALL'); // 'ALL' | 'OCCUPIED' | 'FREE' | 'READY'
+  const [tableFilterType, setTableFilterType] = useState('ALL');
 
-  // Окно просмотра счета (списка блюд) для оплаты
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
 
-  // Состояние всплывающих окон
   const [isCartModalOpen, setIsCartModalOpen] = useState(false);
   const [isConfirmSendModalOpen, setIsConfirmSendModalOpen] = useState(false);
 
-  // Редактирование заметок в чеке
   const [editingCommentItemId, setEditingCommentItemId] = useState(null);
   const [tempCommentText, setTempCommentText] = useState('');
 
-  // Состояния для расходов
   const [expenses, setExpenses] = useState([]);
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseComment, setExpenseComment] = useState('');
 
-  // Облачные заказы Firebase
   const [orders, setOrders] = useState([]);
   const [longPressTimer, setLongPressTimer] = useState(null);
 
+  // Взаимный просмотр цехов: суши-повар видит фастфуд и наоборот
+  const [kitchenViewMode, setKitchenViewMode] = useState('own'); // 'own' | 'other'
+  const KITCHEN_PARTNER_DEPT = {
+    kitchen_sushi: departments.FASTFOOD,
+    kitchen_fastfood: departments.SUSHI_PIZZA,
+  };
+
   const tables = Array.from({ length: 23 }, (_, i) => `Стол ${i + 1}`).concat('С собой');
 
-  // Подписка на заказы и расходы в реальном времени
   useEffect(() => {
     const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
       const ordersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -90,6 +88,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setKitchenViewMode('own');
     setCart([]);
     setSelectedTable(null);
     setActiveOrderId(null);
@@ -110,7 +109,6 @@ export default function App() {
     }
   };
 
-  // При клике на стол
   const handleTableClick = (tableName, activeOrder) => {
     if (activeOrder) {
       setViewingBillOrder(activeOrder);
@@ -123,7 +121,6 @@ export default function App() {
     }
   };
 
-  // Переход в редактирование заказа из окна счета
   const handleEditOrderFromBill = (order) => {
     setSelectedTable(order.table);
     setCart(order.items || []);
@@ -179,7 +176,6 @@ export default function App() {
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Отправка заказа на кухню (создание нового чека или обновление существующего)
   const executeSendOrderToKitchen = async () => {
     if (!selectedTable || cart.length === 0) return;
 
@@ -230,7 +226,6 @@ export default function App() {
     }
   };
 
-  // Мгновенное закрытие окна и расчет стола
   const closeOrderDirectly = async (orderToClose) => {
     if (!orderToClose) return;
     if (window.confirm(`💰 Рассчитать гостей и очистить ${orderToClose.table}?\nИтого к оплате: ${orderToClose.total} сом`)) {
@@ -255,7 +250,6 @@ export default function App() {
     }
   };
 
-  // Добавление расхода
   const handleAddExpense = async (e) => {
     e.preventDefault();
     if (!expenseAmount || !expenseComment) {
@@ -317,7 +311,6 @@ export default function App() {
     }).length;
   };
 
-  // Фильтрация столов по поиску и кнопкам
   const filteredTables = tables.filter(tName => {
     const activeOrder = orders.find(o => o.table === tName && o.status === 'open');
     
@@ -336,8 +329,11 @@ export default function App() {
   });
 
   let activeKitchenDept = null;
+  const hasKitchenPartner = currentUser?.role && KITCHEN_PARTNER_DEPT[currentUser.role];
   if (currentUser?.role.startsWith('kitchen_')) {
-    activeKitchenDept = currentUser.dept;
+    activeKitchenDept = (kitchenViewMode === 'other' && hasKitchenPartner)
+      ? KITCHEN_PARTNER_DEPT[currentUser.role]
+      : currentUser.dept;
   } else if (currentUser?.role === 'admin' && waiterScreen.startsWith('admin_dept_')) {
     if (waiterScreen === 'admin_dept_sushi') activeKitchenDept = departments.SUSHI_PIZZA;
     if (waiterScreen === 'admin_dept_barista') activeKitchenDept = departments.BARISTA;
@@ -348,9 +344,6 @@ export default function App() {
   const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const netCash = totalRevenue - totalExpenses;
 
-  // =========================================================
-  // ЭКРАН ВХОДА
-  // =========================================================
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center px-4">
@@ -378,7 +371,6 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-gray-100 text-gray-800 font-sans overflow-hidden">
       
-      {/* ВЕРХНЯЯ ШАПКА */}
       <header className="bg-gray-900 text-white px-4 py-3 flex flex-wrap justify-between items-center shadow-md z-10 shrink-0 gap-2">
         <div>
           <h1 className="text-sm font-black tracking-wide">HALIL ICE POS</h1>
@@ -424,16 +416,11 @@ export default function App() {
 
       <div className="flex-1 flex overflow-hidden relative">
         
-        {/* ========================================================= */}
-        {/* ИНТЕРФЕЙС ОФИЦИАНТА И АДМИНА (ЗАЛ)                         */}
-        {/* ========================================================= */}
         {(currentUser.role === 'waiter' || currentUser.role === 'admin') && !activeKitchenDept && (
           <>
-            {/* СТРАНИЦА 1: КАРТА СТОЛОВ С ПОИСКОМ И ФИЛЬТРАМИ */}
             {waiterScreen === 'tables' && (
               <div className="flex-1 flex flex-col p-4 overflow-y-auto">
                 
-                {/* ПОИСКОВАЯ СТРОКА И ФИЛЬТРЫ */}
                 <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-200 mb-4 flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0">
                   <div className="relative w-full sm:w-72">
                     <input
@@ -481,7 +468,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* СЕТКА СТОЛОВ */}
                 {filteredTables.length === 0 ? (
                   <div className="bg-white rounded-3xl p-12 text-center border max-w-md mx-auto mt-6 text-gray-400 font-bold">
                     📭 Столы по вашему запросу не найдены
@@ -527,7 +513,6 @@ export default function App() {
               </div>
             )}
 
-            {/* СТРАНИЦА 2: ВЫБОР МЕНЮ ДЛЯ СТОЛА */}
             {waiterScreen === 'order' && (
               <div className="flex-1 flex flex-col overflow-hidden w-full bg-gray-100">
                 <div className="bg-white px-4 py-3 border-b border-gray-200 flex justify-between items-center shrink-0">
@@ -618,7 +603,6 @@ export default function App() {
               </div>
             )}
 
-            {/* СТРАНИЦА 3: МОНИТОР ГОТОВНОСТИ ЗАКАЗОВ */}
             {waiterScreen === 'monitor' && (
               <div className="flex-1 overflow-y-auto p-4">
                 <h2 className="text-lg font-black text-gray-950 mb-4">
@@ -710,7 +694,6 @@ export default function App() {
               </div>
             )}
 
-            {/* СТРАНИЦА 4 (АДМИН): РАСХОДЫ */}
             {waiterScreen === 'expenses' && currentUser.role === 'admin' && (
               <div className="flex-1 overflow-y-auto p-4 max-w-4xl mx-auto w-full">
                 <h2 className="text-xl font-black text-gray-950 mb-4">💸 Учет расходов из кассы</h2>
@@ -749,7 +732,6 @@ export default function App() {
               </div>
             )}
 
-            {/* СТРАНИЦА 5 (АДМИН): ФИНАНСОВЫЙ ОТЧЕТ */}
             {waiterScreen === 'report' && currentUser.role === 'admin' && (
               <div className="flex-1 overflow-y-auto p-4 max-w-4xl mx-auto w-full space-y-6 pb-12">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -797,9 +779,6 @@ export default function App() {
           </>
         )}
 
-        {/* ========================================================= */}
-        {/* ИНТЕРФЕЙС КУХНИ / БАРА                                     */}
-        {/* ========================================================= */}
         {activeKitchenDept && (() => {
           const deptOrders = orders.filter(order => 
             order.status === 'open' &&
@@ -812,6 +791,23 @@ export default function App() {
               <h2 className="text-xl font-black text-gray-950 mb-4">
                 👨‍🍳 Монитор: <span className="text-blue-600">{activeKitchenDept}</span>
               </h2>
+
+              {hasKitchenPartner && (
+                <div className="flex gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 mb-4 w-fit">
+                  <button
+                    onClick={() => setKitchenViewMode('own')}
+                    className={`px-4 py-2 rounded-lg font-black text-xs transition-all ${kitchenViewMode === 'own' ? 'bg-blue-600 text-white shadow' : 'text-gray-500'}`}
+                  >
+                    {currentUser.dept === departments.SUSHI_PIZZA ? '🍣 Суши (мой цех)' : '🍔 Фастфуд (мой цех)'}
+                  </button>
+                  <button
+                    onClick={() => setKitchenViewMode('other')}
+                    className={`px-4 py-2 rounded-lg font-black text-xs transition-all ${kitchenViewMode === 'other' ? 'bg-blue-600 text-white shadow' : 'text-gray-500'}`}
+                  >
+                    {KITCHEN_PARTNER_DEPT[currentUser.role] === departments.SUSHI_PIZZA ? '🍣 Суши' : '🍔 Фастфуд'}
+                  </button>
+                </div>
+              )}
               {deptOrders.length === 0 ? (
                 <div className="bg-white rounded-3xl p-12 text-center border max-w-md mx-auto mt-6">
                   <span className="text-4xl block mb-2">✅</span>
@@ -858,9 +854,6 @@ export default function App() {
 
       </div>
 
-      {/* ========================================================= */}
-      {/* ОКНО: «СЧЕТ ГОСТЯ / СПИСОК БЛЮД» С МГНОВЕННЫМ ЗАКРЫТИЕМ   */}
-      {/* ========================================================= */}
       {viewingBillOrder && (
         <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
@@ -874,7 +867,6 @@ export default function App() {
               <button onClick={() => setViewingBillOrder(null)} className="bg-gray-800 text-white w-9 h-9 rounded-full font-bold text-base hover:bg-gray-700">✕</button>
             </div>
 
-            {/* СПИСОК ЗАКАЗАННЫХ БЛЮД */}
             <div className="flex-1 overflow-y-auto p-4 divide-y divide-gray-100">
               <div className="flex justify-between text-[10px] font-black uppercase text-gray-400 pb-2">
                 <span>Наименование</span>
@@ -897,14 +889,12 @@ export default function App() {
               ))}
             </div>
 
-            {/* ИТОГОВАЯ СУММА И КНОПКИ ДЕЙСТВИЙ */}
             <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-3">
               <div className="flex justify-between items-center bg-white p-3 rounded-2xl border border-gray-200 shadow-sm">
                 <span className="font-extrabold text-gray-700 text-base">ИТОГО К ОПЛАТЕ:</span>
                 <span className="text-2xl font-black text-emerald-600">{viewingBillOrder.total} сом</span>
               </div>
 
-              {/* Кнопка расчета (Только для Администратора) */}
               {currentUser.role === 'admin' && (
                 <button
                   onClick={() => closeOrderDirectly(viewingBillOrder)}
@@ -914,7 +904,6 @@ export default function App() {
                 </button>
               )}
 
-              {/* Кнопка изменения или дозаказа */}
               <button
                 onClick={() => handleEditOrderFromBill(viewingBillOrder)}
                 className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 rounded-xl font-bold text-xs shadow transition-all"
@@ -927,7 +916,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ОКНО ЧЕКА ПРИ РЕДАКТИРОВАНИИ */}
       {isCartModalOpen && (
         <div className="fixed inset-0 bg-black/70 z-40 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
@@ -985,7 +973,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ОКНО РЕДАКТИРОВАНИЯ ЗАМЕТКИ */}
       {editingCommentItemId && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
