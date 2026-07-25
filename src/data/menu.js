@@ -59,12 +59,12 @@ export const menuData = [
   { id: 'z6', name: 'Киото Острый', price: 250, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
 
   // Пицца
-  { id: 'p1', name: 'Пицца Двойная Пепперони', price: 500, category: 'Пицца', dept: departments.SUSHI_PIZZA },
-  { id: 'p2', name: 'Пицца Пепперони', price: 450, category: 'Пицца', dept: departments.SUSHI_PIZZA },
-  { id: 'p3', name: 'Пицца Четыре Сыра', price: 400, category: 'Пицца', dept: departments.SUSHI_PIZZA },
-  { id: 'p4', name: 'Пицца с ветчиной и грибами', price: 400, category: 'Пицца', dept: departments.SUSHI_PIZZA },
-  { id: 'p5', name: 'Пицца с Курицей', price: 400, category: 'Пицца', dept: departments.SUSHI_PIZZA },
-  { id: 'p6', name: 'Пицца Маргарита', price: 400, category: 'Пицца', dept: departments.SUSHI_PIZZA },
+  { id: 'p1', name: 'Пицца Двойная Пепперони', price: 350, category: 'Пицца', dept: departments.SUSHI_PIZZA },
+  { id: 'p2', name: 'Пицца Пепперони', price: 300, category: 'Пицца', dept: departments.SUSHI_PIZZA },
+  { id: 'p3', name: 'Пицца Четыре Сыра', price: 300, category: 'Пицца', dept: departments.SUSHI_PIZZA },
+  { id: 'p4', name: 'Пицца с ветчиной и грибами', price: 300, category: 'Пицца', dept: departments.SUSHI_PIZZA },
+  { id: 'p5', name: 'Пицца с Курицей', price: 300, category: 'Пицца', dept: departments.SUSHI_PIZZA },
+  { id: 'p6', name: 'Пицца Маргарита', price: 300, category: 'Пицца', dept: departments.SUSHI_PIZZA },
 
   // Соусы
   { id: 'sau1', name: 'Соус Кетчуп', price: 20, category: 'Соусы', dept: departments.SUSHI_PIZZA },
@@ -93,6 +93,9 @@ export const menuData = [
   { id: 'gv_15', name: 'Газ Вода (0.5л)', price: 15, category: 'Напитки', dept: departments.BARISTA },
   { id: 'gv_25', name: 'Газ Вода (1л)', price: 25, category: 'Напитки', dept: departments.BARISTA },
   { id: 'co_100', name: 'Коктейль', price: 100, category: 'Напитки', dept: departments.BARISTA },
+  { id: 'water_70', name: 'Вода 0,5л', price: 70, category: 'Напитки', dept: departments.BARISTA },
+  { id: 'Water_110', name: 'Вода 1л', price: 110, category: 'Напитки', dept: departments.BARISTA },
+
 
   // Мохито
   { id: 'm1_st', name: 'Мохито Клубничный (Стакан)', price: 100, category: 'Мохито', dept: departments.BARISTA },
