@@ -45,8 +45,7 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [longPressTimer, setLongPressTimer] = useState(null);
 
-  // Взаимный просмотр цехов: суши-повар видит фастфуд и наоборот
-  const [kitchenViewMode, setKitchenViewMode] = useState('own'); // 'own' | 'other'
+  const [kitchenViewMode, setKitchenViewMode] = useState('own');
   const KITCHEN_PARTNER_DEPT = {
     kitchen_sushi: departments.FASTFOOD,
     kitchen_fastfood: departments.SUSHI_PIZZA,
@@ -628,6 +627,9 @@ export default function App() {
                               <div>
                                 <span className="block font-black text-lg">{order.table}</span>
                                 <span className="text-[10px] text-gray-400">Официант: {order.waiter} | {order.time}</span>
+                                {order.lastEditedAt && (
+                                  <span className="text-[10px] text-orange-300 font-black block mt-0.5">✏️ Дозаказ/Изменён {order.lastEditedTime}</span>
+                                )}
                               </div>
                               
                               <button 
