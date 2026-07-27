@@ -97,7 +97,6 @@ export default function App() {
     setViewingBillOrder(null);
   };
 
-  // Кухня отмечает "Готово"
   const completeDeptPart = async (orderId, currentCompletedDepts, dept) => {
     try {
       const orderRef = doc(db, "orders", orderId);
@@ -205,7 +204,9 @@ export default function App() {
         await updateDoc(doc(db, 'orders', orderIdToUpdate), {
           items: orderData.items,
           total: orderData.total,
-          completedDepts: []
+          completedDepts: [],
+          lastEditedAt: Date.now(),
+          lastEditedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       } else {
         await addDoc(collection(db, 'orders'), orderData);
@@ -823,6 +824,11 @@ export default function App() {
                           <div>
                             <span className="block font-black text-xl text-gray-950">{order.table}</span>
                             <span className="text-[10px] text-blue-800 font-bold bg-blue-100 px-2 py-0.5 rounded mt-0.5 inline-block">💁‍♂️ {order.waiter}</span>
+                            {order.lastEditedAt && (
+                              <span className="text-[10px] text-orange-800 font-black bg-orange-100 px-2 py-0.5 rounded mt-0.5 ml-1 inline-block border border-orange-300">
+                                ✏️ Дозаказ/Изменён {order.lastEditedTime}
+                              </span>
+                            )}
                           </div>
                           <span className="text-[10px] text-gray-400 font-bold">{order.time}</span>
                         </div>
