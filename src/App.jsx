@@ -26,6 +26,7 @@ export default function App() {
   const [cart, setCart] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null); 
   const [activeOrderId, setActiveOrderId] = useState(null); 
+  const [originalOrderItems, setOriginalOrderItems] = useState([]);
   
   const [tableSearchQuery, setTableSearchQuery] = useState('');
   const [tableFilterType, setTableFilterType] = useState('ALL');
@@ -114,6 +115,7 @@ export default function App() {
       setSelectedTable(tableName);
       setCart([]);
       setActiveOrderId(null);
+      setOriginalOrderItems([]);
       setWaiterScreen('order');
       setIsCartModalOpen(false);
     }
@@ -123,6 +125,7 @@ export default function App() {
     setSelectedTable(order.table);
     setCart(order.items || []);
     setActiveOrderId(order.id);
+    setOriginalOrderItems(order.items || []);
     setViewingBillOrder(null);
     setWaiterScreen('order');
   };
@@ -193,9 +196,19 @@ export default function App() {
     };
     const orderIdToUpdate = activeOrderId;
 
+    const newlyAddedItemIds = orderIdToUpdate
+      ? cart
+          .filter(item => {
+            const orig = originalOrderItems.find(o => o.id === item.id);
+            return !orig || item.quantity > orig.quantity;
+          })
+          .map(item => item.id)
+      : [];
+
     setCart([]);
     setSelectedTable(null);
     setActiveOrderId(null);
+    setOriginalOrderItems([]);
     setWaiterScreen('tables');
 
     try {
@@ -205,7 +218,8 @@ export default function App() {
           total: orderData.total,
           completedDepts: [],
           lastEditedAt: Date.now(),
-          lastEditedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          lastEditedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          lastAddedItemIds: newlyAddedItemIds
         });
       } else {
         await addDoc(collection(db, 'orders'), orderData);
@@ -645,8 +659,8 @@ export default function App() {
                                 <div className="font-extrabold text-gray-400 uppercase text-[9px] mb-1">🍽️ Заказ гостя:</div>
                                 <div className="max-h-24 overflow-y-auto space-y-1 divide-y divide-gray-100">
                                   {order.items.map((item, idx) => (
-                                    <div key={idx} className="pt-1 flex justify-between font-bold text-gray-800 text-xs">
-                                      <span>{item.quantity}х {item.name}</span>
+                                    <div key={idx} className={`pt-1 flex justify-between font-bold text-gray-800 text-xs ${order.lastAddedItemIds?.includes(item.id) ? 'bg-orange-50 px-1 rounded' : ''}`}>
+                                      <span>{item.quantity}х {item.name}{order.lastAddedItemIds?.includes(item.id) && <span className="ml-1 text-[9px] bg-orange-500 text-white font-black px-1 py-0.5 rounded">🆕</span>}</span>
                                       <span className="text-gray-500">{item.price * item.quantity} с</span>
                                     </div>
                                   ))}
@@ -828,25 +842,34 @@ export default function App() {
                             <span className="text-[10px] text-blue-800 font-bold bg-blue-100 px-2 py-0.5 rounded mt-0.5 inline-block">💁‍♂️ {order.waiter}</span>
                             {order.lastEditedAt && (
                               <span className="text-[10px] text-orange-800 font-black bg-orange-100 px-2 py-0.5 rounded mt-0.5 ml-1 inline-block border border-orange-300">
-                                ✏️ Дозаказ/Изменён {order.lastEditedTime}
+                                ✏️ Дозаказ {order.lastEditedTime}
                               </span>
                             )}
                           </div>
                           <span className="text-[10px] text-gray-400 font-bold">{order.time}</span>
                         </div>
                         <div className="p-3 flex-1 divide-y">
-                          {targetItems.map((item, idx) => (
-                            <div key={idx} className="py-2 flex flex-col">
-                              <div className="flex justify-between items-center font-bold text-xs sm:text-sm">
-                                <span><span className="bg-blue-600 text-white px-2 py-0.5 rounded-md mr-1.5 text-[10px]">{item.quantity} шт</span>{item.name}</span>
-                              </div>
-                              {item.comment && (
-                                <div className="mt-1 text-xs font-black text-amber-900 bg-amber-100 p-2 rounded-lg border border-amber-300">
-                                  ⚠️ <span className="underline">Заметка:</span> {item.comment}
+                          {targetItems.map((item, idx) => {
+                            const isNewlyAdded = order.lastAddedItemIds?.includes(item.id);
+                            return (
+                              <div key={idx} className={`py-2 flex flex-col ${isNewlyAdded ? 'bg-orange-50 -mx-3 px-3 rounded-lg' : ''}`}>
+                                <div className="flex justify-between items-center font-bold text-xs sm:text-sm">
+                                  <span>
+                                    <span className="bg-blue-600 text-white px-2 py-0.5 rounded-md mr-1.5 text-[10px]">{item.quantity} шт</span>
+                                    {item.name}
+                                    {isNewlyAdded && (
+                                      <span className="ml-1.5 text-[9px] bg-orange-500 text-white font-black px-1.5 py-0.5 rounded">🆕 НОВОЕ</span>
+                                    )}
+                                  </span>
                                 </div>
-                              )}
-                            </div>
-                          ))}
+                                {item.comment && (
+                                  <div className="mt-1 text-xs font-black text-amber-900 bg-amber-100 p-2 rounded-lg border border-amber-300">
+                                    ⚠️ <span className="underline">Заметка:</span> {item.comment}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                         <div className="p-3 bg-gray-50 border-t">
                           <button onClick={() => completeDeptPart(order.id, order.completedDepts || [], activeKitchenDept)} className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs shadow">✅ Готово!</button>
