@@ -76,6 +76,7 @@ export const menuData = [
   //                 БАРИСТА
   // ==========================================
   // Новые дополнения: Общее мороженое и Фруктовое мороженое
+  { id: 'ic_gen_30', name: 'Мороженое (Рожок)', price: 30, category: 'Мороженое', dept: departments.BARISTA },
   { id: 'ic_gen_50', name: 'Мороженое (Малое)', price: 50, category: 'Мороженое', dept: departments.BARISTA },
   { id: 'ic_gen_70', name: 'Мороженое (Среднее)', price: 70, category: 'Мороженое', dept: departments.BARISTA },
   { id: 'ic_gen_100', name: 'Мороженое (Большое)', price: 100, category: 'Мороженое', dept: departments.BARISTA },
@@ -90,8 +91,9 @@ export const menuData = [
   { id: 'ic6', name: 'Шариковое Мороженое (Манго)', price: 50, category: 'Мороженое', dept: departments.BARISTA },
 
   // Новые дополнения: Газ вода и Коктейль
-  { id: 'gv_15', name: 'Газ Вода (0.5л)', price: 15, category: 'Напитки', dept: departments.BARISTA },
-  { id: 'gv_25', name: 'Газ Вода (1л)', price: 25, category: 'Напитки', dept: departments.BARISTA },
+  { id: 'gv_15', name: 'Газ Вода (стакан 0,2л)', price: 15, category: 'Напитки', dept: departments.BARISTA },
+  { id: 'gv_25', name: 'Газ Вода (стакан 0,35л)', price: 25, category: 'Напитки', dept: departments.BARISTA },
+  { id: 'gv_50', name: 'Газ Вода ( 1л)', price: 50, category: 'Напитки', dept: departments.BARISTA },
   { id: 'co_100', name: 'Коктейль', price: 100, category: 'Напитки', dept: departments.BARISTA },
   { id: 'water_70', name: 'Вода 0,5л', price: 70, category: 'Напитки', dept: departments.BARISTA },
   { id: 'Water_110', name: 'Вода 1л', price: 110, category: 'Напитки', dept: departments.BARISTA },

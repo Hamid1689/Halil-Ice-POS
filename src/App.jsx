@@ -13,6 +13,29 @@ const USERS_DB = [
   { id: 'k3', name: 'НОДИРБЕК (Фастфуд)', role: 'kitchen_fastfood', pin: '6666', dept: departments.FASTFOOD },
 ];
 
+const uid = () => `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+const aggregateByDish = (items) => {
+  const map = new Map();
+  (items || []).forEach(item => {
+    const key = item.dishId + '|' + (item.comment || '');
+    if (map.has(key)) {
+      map.get(key).quantity += item.quantity;
+    } else {
+      map.set(key, { ...item });
+    }
+  });
+  return Array.from(map.values());
+};
+
+const getDeptStatus = (items, dept) => {
+  const deptItems = (items || []).filter(i => i.dept === dept);
+  if (deptItems.length === 0) return null;
+  if (deptItems.some(i => i.status === 'pending')) return 'pending';
+  if (deptItems.some(i => i.status === 'done')) return 'ready';
+  return 'picked_up';
+};
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(USERS_DB[0].id);
@@ -26,7 +49,6 @@ export default function App() {
   const [cart, setCart] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null); 
   const [activeOrderId, setActiveOrderId] = useState(null); 
-  const [originalOrderItems, setOriginalOrderItems] = useState([]);
   
   const [tableSearchQuery, setTableSearchQuery] = useState('');
   const [tableFilterType, setTableFilterType] = useState('ALL');
@@ -97,14 +119,25 @@ export default function App() {
     setViewingBillOrder(null);
   };
 
-  const completeDeptPart = async (orderId, currentCompletedDepts, dept) => {
+  const completeLineItem = async (order, lineId) => {
     try {
-      const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, {
-        completedDepts: [...(currentCompletedDepts || []), dept]
-      });
+      const updatedItems = order.items.map(i =>
+        i.lineId === lineId ? { ...i, status: 'done', doneAt: Date.now() } : i
+      );
+      await updateDoc(doc(db, 'orders', order.id), { items: updatedItems });
     } catch (error) {
       console.error("Ошибка:", error);
+    }
+  };
+
+  const handleWaiterPickUp = async (order, deptName) => {
+    try {
+      const updatedItems = order.items.map(i =>
+        (i.dept === deptName && i.status === 'done') ? { ...i, status: 'picked_up' } : i
+      );
+      await updateDoc(doc(db, 'orders', order.id), { items: updatedItems });
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -115,7 +148,6 @@ export default function App() {
       setSelectedTable(tableName);
       setCart([]);
       setActiveOrderId(null);
-      setOriginalOrderItems([]);
       setWaiterScreen('order');
       setIsCartModalOpen(false);
     }
@@ -123,9 +155,17 @@ export default function App() {
 
   const handleEditOrderFromBill = (order) => {
     setSelectedTable(order.table);
-    setCart(order.items || []);
+    const agg = aggregateByDish(order.items || []);
+    setCart(agg.map(a => ({
+      id: a.dishId,
+      name: a.name,
+      price: a.price,
+      dept: a.dept,
+      category: a.category,
+      quantity: a.quantity,
+      comment: a.comment || ''
+    })));
     setActiveOrderId(order.id);
-    setOriginalOrderItems(order.items || []);
     setViewingBillOrder(null);
     setWaiterScreen('order');
   };
@@ -183,60 +223,121 @@ export default function App() {
     setIsConfirmSendModalOpen(false);
     setIsCartModalOpen(false);
 
-    const orderData = {
-      table: selectedTable,
-      waiter: currentUser.name,
-      items: [...cart],
-      total: cartTotal,
-      completedDepts: [],
-      pickedUpDepts: [],
-      status: 'open',
-      createdAt: Date.now(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
     const orderIdToUpdate = activeOrderId;
 
-    const newlyAddedItemIds = orderIdToUpdate
-      ? cart
-          .filter(item => {
-            const orig = originalOrderItems.find(o => o.id === item.id);
-            return !orig || item.quantity > orig.quantity;
-          })
-          .map(item => item.id)
-      : [];
+    if (orderIdToUpdate) {
+      const existingOrder = orders.find(o => o.id === orderIdToUpdate);
+      const existingItems = existingOrder?.items || [];
+      const maxBatch = existingItems.reduce((m, i) => Math.max(m, i.batchNumber || 1), 1);
+      const newBatchNumber = maxBatch + 1;
 
-    setCart([]);
-    setSelectedTable(null);
-    setActiveOrderId(null);
-    setOriginalOrderItems([]);
-    setWaiterScreen('tables');
-
-    try {
-      if (orderIdToUpdate) {
-        await updateDoc(doc(db, 'orders', orderIdToUpdate), {
-          items: orderData.items,
-          total: orderData.total,
-          completedDepts: [],
-          lastEditedAt: Date.now(),
-          lastEditedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          lastAddedItemIds: newlyAddedItemIds
-        });
-      } else {
-        await addDoc(collection(db, 'orders'), orderData);
-      }
-    } catch (error) {
-      console.error("Ошибка Firebase:", error);
-      alert("⚠️ Ошибка сети при отправке заказа! Проверьте интернет.");
-    }
-  };
-
-  const handleWaiterPickUp = async (orderId, currentPickedUp, deptName) => {
-    try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        pickedUpDepts: [...(currentPickedUp || []), deptName]
+      const oldAgg = {};
+      existingItems.forEach(i => {
+        const key = i.dishId + '|' + (i.comment || '');
+        oldAgg[key] = (oldAgg[key] || 0) + i.quantity;
       });
-    } catch (error) {
-      console.error(error);
+
+      let workingItems = existingItems.map(i => ({ ...i }));
+      const newLines = [];
+
+      cart.forEach(cartItem => {
+        const key = cartItem.id + '|' + (cartItem.comment || '');
+        const oldQty = oldAgg[key] || 0;
+        const delta = cartItem.quantity - oldQty;
+
+        if (delta > 0) {
+          newLines.push({
+            lineId: uid(),
+            dishId: cartItem.id,
+            name: cartItem.name,
+            price: cartItem.price,
+            dept: cartItem.dept,
+            category: cartItem.category,
+            quantity: delta,
+            comment: cartItem.comment || '',
+            batchNumber: newBatchNumber,
+            status: 'pending'
+          });
+        } else if (delta < 0) {
+          let toRemove = -delta;
+          const candidates = workingItems
+            .filter(it => it.dishId === cartItem.id && (it.comment || '') === (cartItem.comment || ''))
+            .sort((a, b) => {
+              const rank = s => (s === 'pending' ? 0 : s === 'done' ? 1 : 2);
+              if (rank(a.status) !== rank(b.status)) return rank(a.status) - rank(b.status);
+              return (b.batchNumber || 1) - (a.batchNumber || 1);
+            });
+          for (const line of candidates) {
+            if (toRemove <= 0) break;
+            const take = Math.min(line.quantity, toRemove);
+            line.quantity -= take;
+            toRemove -= take;
+          }
+          workingItems = workingItems.filter(l => l.quantity > 0);
+        }
+      });
+
+      const cartKeys = new Set(cart.map(ci => ci.id + '|' + (ci.comment || '')));
+      Object.keys(oldAgg).forEach(key => {
+        if (!cartKeys.has(key)) {
+          workingItems = workingItems.filter(l => (l.dishId + '|' + (l.comment || '')) !== key);
+        }
+      });
+
+      const finalItems = [...workingItems, ...newLines];
+      const total = finalItems.reduce((s, i) => s + i.price * i.quantity, 0);
+
+      setCart([]);
+      setSelectedTable(null);
+      setActiveOrderId(null);
+      setWaiterScreen('tables');
+
+      try {
+        await updateDoc(doc(db, 'orders', orderIdToUpdate), {
+          items: finalItems,
+          total,
+          lastEditedAt: Date.now(),
+          lastEditedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      } catch (error) {
+        console.error("Ошибка Firebase:", error);
+        alert("⚠️ Ошибка сети при отправке заказа! Проверьте интернет.");
+      }
+    } else {
+      const finalItems = cart.map(ci => ({
+        lineId: uid(),
+        dishId: ci.id,
+        name: ci.name,
+        price: ci.price,
+        dept: ci.dept,
+        category: ci.category,
+        quantity: ci.quantity,
+        comment: ci.comment || '',
+        batchNumber: 1,
+        status: 'pending'
+      }));
+      const total = finalItems.reduce((s, i) => s + i.price * i.quantity, 0);
+      const newOrder = {
+        table: selectedTable,
+        waiter: currentUser.name,
+        items: finalItems,
+        total,
+        status: 'open',
+        createdAt: Date.now(),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setCart([]);
+      setSelectedTable(null);
+      setActiveOrderId(null);
+      setWaiterScreen('tables');
+
+      try {
+        await addDoc(collection(db, 'orders'), newOrder);
+      } catch (error) {
+        console.error("Ошибка Firebase:", error);
+        alert("⚠️ Ошибка сети при отправке заказа! Проверьте интернет.");
+      }
     }
   };
 
@@ -321,7 +422,7 @@ export default function App() {
     return orders.filter(order => {
       if (order.status !== 'open') return false;
       if (currentUser.role === 'waiter' && order.waiter !== currentUser?.name) return false;
-      return order.completedDepts?.some(dept => !order.pickedUpDepts?.includes(dept));
+      return order.items?.some(i => i.status === 'done');
     }).length;
   };
 
@@ -336,7 +437,7 @@ export default function App() {
     if (tableFilterType === 'FREE' && activeOrder) return false;
     if (tableFilterType === 'READY') {
       if (!activeOrder) return false;
-      const hasAlert = activeOrder.completedDepts?.some(d => !activeOrder.pickedUpDepts?.includes(d));
+      const hasAlert = activeOrder.items?.some(i => i.status === 'done');
       if (!hasAlert) return false;
     }
     return true;
@@ -495,7 +596,7 @@ export default function App() {
                       let statusText = "🟢 Свободен";
                       let isLocked = false;
 
-                      const hasAlert = activeOrder && (activeOrder.waiter === currentUser.name || currentUser.role === 'admin') && activeOrder.completedDepts?.some(d => !activeOrder.pickedUpDepts?.includes(d));
+                      const hasAlert = activeOrder && (activeOrder.waiter === currentUser.name || currentUser.role === 'admin') && activeOrder.items?.some(i => i.status === 'done');
 
                       if (activeOrder) {
                         if (activeOrder.waiter === currentUser.name || currentUser.role === 'admin') {
@@ -633,7 +734,8 @@ export default function App() {
                     {orders
                       .filter(order => order.status === 'open' && (currentUser.role === 'admin' || order.waiter === currentUser.name))
                       .map(order => {
-                        const involvedDepts = [...new Set(order.items.map(i => i.dept))];
+                        const involvedDepts = [...new Set((order.items || []).map(i => i.dept))];
+                        const aggregatedItems = aggregateByDish(order.items || []);
 
                         return (
                           <div key={order.id} className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden flex flex-col justify-between">
@@ -641,9 +743,6 @@ export default function App() {
                               <div>
                                 <span className="block font-black text-lg">{order.table}</span>
                                 <span className="text-[10px] text-gray-400">Официант: {order.waiter} | {order.time}</span>
-                                {order.lastEditedAt && (
-                                  <span className="text-[10px] text-orange-300 font-black block mt-0.5">✏️ Дозаказ/Изменён {order.lastEditedTime}</span>
-                                )}
                               </div>
                               
                               <button 
@@ -658,9 +757,9 @@ export default function App() {
                               <div className="bg-white p-2.5 rounded-xl border border-gray-200 text-xs mb-2">
                                 <div className="font-extrabold text-gray-400 uppercase text-[9px] mb-1">🍽️ Заказ гостя:</div>
                                 <div className="max-h-24 overflow-y-auto space-y-1 divide-y divide-gray-100">
-                                  {order.items.map((item, idx) => (
-                                    <div key={idx} className={`pt-1 flex justify-between font-bold text-gray-800 text-xs ${order.lastAddedItemIds?.includes(item.id) ? 'bg-orange-50 px-1 rounded' : ''}`}>
-                                      <span>{item.quantity}х {item.name}{order.lastAddedItemIds?.includes(item.id) && <span className="ml-1 text-[9px] bg-orange-500 text-white font-black px-1 py-0.5 rounded">🆕</span>}</span>
+                                  {aggregatedItems.map((item, idx) => (
+                                    <div key={idx} className="pt-1 flex justify-between font-bold text-gray-800 text-xs">
+                                      <span>{item.quantity}х {item.name}</span>
                                       <span className="text-gray-500">{item.price * item.quantity} с</span>
                                     </div>
                                   ))}
@@ -668,17 +767,16 @@ export default function App() {
                               </div>
 
                               {involvedDepts.map(deptName => {
-                                const isCompleted = order.completedDepts?.includes(deptName);
-                                const isPickedUp = order.pickedUpDepts?.includes(deptName);
+                                const status = getDeptStatus(order.items, deptName);
 
-                                if (!isCompleted) {
+                                if (status === 'pending') {
                                   return (
                                     <div key={deptName} className="flex items-center justify-between bg-white p-2.5 rounded-xl border text-xs">
                                       <span className="font-bold text-gray-700">⚙️ {deptName}</span>
                                       <span className="bg-amber-50 text-amber-600 font-extrabold px-2 py-0.5 rounded border border-amber-200">⏳ Готовится</span>
                                     </div>
                                   );
-                                } else if (isCompleted && !isPickedUp) {
+                                } else if (status === 'ready') {
                                   return (
                                     <div key={deptName} className="flex flex-col gap-1.5 bg-emerald-50 p-2.5 rounded-xl border-2 border-emerald-400">
                                       <div className="flex items-center justify-between">
@@ -686,7 +784,7 @@ export default function App() {
                                         <span className="text-[10px] bg-emerald-600 text-white font-black px-2 py-0.5 rounded">🔔 ГОТОВО!</span>
                                       </div>
                                       <button
-                                        onClick={() => handleWaiterPickUp(order.id, order.pickedUpDepts, deptName)}
+                                        onClick={() => handleWaiterPickUp(order, deptName)}
                                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2 rounded-lg shadow"
                                       >
                                         ✅ Забрал с раздачи
@@ -799,8 +897,7 @@ export default function App() {
         {activeKitchenDept && (() => {
           const deptOrders = orders.filter(order => 
             order.status === 'open' &&
-            order.items.some(item => item.dept === activeKitchenDept) && 
-            (!order.completedDepts || !order.completedDepts.includes(activeKitchenDept))
+            (order.items || []).some(item => item.dept === activeKitchenDept && item.status === 'pending')
           );
 
           return (
@@ -833,46 +930,43 @@ export default function App() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {deptOrders.map(order => {
-                    const targetItems = order.items.filter(item => item.dept === activeKitchenDept);
+                    const pendingItems = order.items.filter(item => item.dept === activeKitchenDept && item.status === 'pending');
                     return (
                       <div key={order.id} className="bg-white rounded-2xl shadow-md border-2 border-blue-100 overflow-hidden flex flex-col justify-between">
                         <div className="p-3 bg-blue-50/40 flex justify-between items-start border-b">
                           <div>
                             <span className="block font-black text-xl text-gray-950">{order.table}</span>
                             <span className="text-[10px] text-blue-800 font-bold bg-blue-100 px-2 py-0.5 rounded mt-0.5 inline-block">💁‍♂️ {order.waiter}</span>
-                            {order.lastEditedAt && (
-                              <span className="text-[10px] text-orange-800 font-black bg-orange-100 px-2 py-0.5 rounded mt-0.5 ml-1 inline-block border border-orange-300">
-                                ✏️ Дозаказ {order.lastEditedTime}
-                              </span>
-                            )}
                           </div>
                           <span className="text-[10px] text-gray-400 font-bold">{order.time}</span>
                         </div>
                         <div className="p-3 flex-1 divide-y">
-                          {targetItems.map((item, idx) => {
-                            const isNewlyAdded = order.lastAddedItemIds?.includes(item.id);
-                            return (
-                              <div key={idx} className={`py-2 flex flex-col ${isNewlyAdded ? 'bg-orange-50 -mx-3 px-3 rounded-lg' : ''}`}>
-                                <div className="flex justify-between items-center font-bold text-xs sm:text-sm">
-                                  <span>
-                                    <span className="bg-blue-600 text-white px-2 py-0.5 rounded-md mr-1.5 text-[10px]">{item.quantity} шт</span>
-                                    {item.name}
-                                    {isNewlyAdded && (
-                                      <span className="ml-1.5 text-[9px] bg-orange-500 text-white font-black px-1.5 py-0.5 rounded">🆕 НОВОЕ</span>
-                                    )}
-                                  </span>
-                                </div>
-                                {item.comment && (
-                                  <div className="mt-1 text-xs font-black text-amber-900 bg-amber-100 p-2 rounded-lg border border-amber-300">
-                                    ⚠️ <span className="underline">Заметка:</span> {item.comment}
-                                  </div>
-                                )}
+                          {pendingItems.map(item => (
+                            <div key={item.lineId} className={`py-2 flex flex-col gap-1.5 ${item.batchNumber > 1 ? 'bg-orange-50 -mx-3 px-3 rounded-lg' : ''}`}>
+                              <div className="flex justify-between items-center font-bold text-xs sm:text-sm gap-2">
+                                <span className="flex-1">
+                                  <span className="bg-blue-600 text-white px-2 py-0.5 rounded-md mr-1.5 text-[10px]">{item.quantity} шт</span>
+                                  {item.name}
+                                  {item.batchNumber > 1 ? (
+                                    <span className="ml-1.5 text-[9px] bg-orange-500 text-white font-black px-1.5 py-0.5 rounded">➕ ДОЗАКАЗ #{item.batchNumber - 1}</span>
+                                  ) : (
+                                    <span className="ml-1.5 text-[9px] bg-emerald-500 text-white font-black px-1.5 py-0.5 rounded">🆕 НОВОЕ</span>
+                                  )}
+                                </span>
+                                <button
+                                  onClick={() => completeLineItem(order, item.lineId)}
+                                  className="shrink-0 bg-green-600 hover:bg-green-700 text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg shadow"
+                                >
+                                  ✅ Готово
+                                </button>
                               </div>
-                            );
-                          })}
-                        </div>
-                        <div className="p-3 bg-gray-50 border-t">
-                          <button onClick={() => completeDeptPart(order.id, order.completedDepts || [], activeKitchenDept)} className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs shadow">✅ Готово!</button>
+                              {item.comment && (
+                                <div className="text-xs font-black text-amber-900 bg-amber-100 p-2 rounded-lg border border-amber-300">
+                                  ⚠️ <span className="underline">Заметка:</span> {item.comment}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     );
@@ -904,7 +998,7 @@ export default function App() {
                 <span>Кол-во × Цена</span>
                 <span>Сумма</span>
               </div>
-              {viewingBillOrder.items.map((item, idx) => (
+              {aggregateByDish(viewingBillOrder.items || []).map((item, idx) => (
                 <div key={idx} className="py-2.5 flex justify-between items-center text-sm">
                   <div className="flex-1 pr-2">
                     <span className="font-extrabold text-gray-900 block">{item.name}</span>
