@@ -54,7 +54,7 @@ export const menuData = [
   { id: 'z1', name: 'Запеченный Лосось терияки', price: 280, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
   { id: 'z2', name: 'Запеченный Калифорния', price: 250, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
   { id: 'z3', name: 'Запеченный Угорь', price: 300, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
-  { id: 'z4', name: 'Запеченный Лосось', price: 280, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
+  { id: 'z4', name: 'Запеченный Лосось', price: 300, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
   { id: 'z5', name: 'Запеченный Курица', price: 280, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
   { id: 'z6', name: 'Киото Острый', price: 250, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
 

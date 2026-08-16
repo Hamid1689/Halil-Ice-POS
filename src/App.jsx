@@ -871,19 +871,65 @@ export default function App() {
                   </div>
                 </div>
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
+                  <h3 className="font-black text-sm text-gray-800 mb-3 border-b pb-2">📦 Продажи по блюдам за смену:</h3>
+                  {(() => {
+                    const salesMap = new Map();
+                    orders.filter(o => o.status === 'closed').forEach(order => {
+                      aggregateByDish(order.items || []).forEach(item => {
+                        const key = item.dishId || item.name;
+                        if (!salesMap.has(key)) {
+                          salesMap.set(key, { name: item.name, category: item.category, quantity: 0, revenue: 0 });
+                        }
+                        const entry = salesMap.get(key);
+                        entry.quantity += item.quantity;
+                        entry.revenue += item.price * item.quantity;
+                      });
+                    });
+                    const salesList = Array.from(salesMap.values()).sort((a, b) => b.quantity - a.quantity);
+                    return salesList.length === 0 ? (
+                      <div className="text-center py-6 text-gray-400 font-bold text-sm">Пока ничего не продано в этой смене</div>
+                    ) : (
+                      <div className="divide-y max-h-80 overflow-y-auto">
+                        {salesList.map((item, idx) => (
+                          <div key={idx} className="py-2 flex justify-between items-center text-sm">
+                            <div>
+                              <span className="font-bold text-gray-900">{item.name}</span>
+                              <span className="text-[10px] text-gray-400 ml-2">{item.category}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-black text-blue-600">{item.quantity} шт</span>
+                              <span className="font-bold text-emerald-600 text-xs w-16 text-right">{item.revenue} сом</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
                   <h3 className="font-black text-sm text-gray-800 mb-3 border-b pb-2">✅ Закрытые чеки за сегодня:</h3>
                   {orders.filter(o => o.status === 'closed').length === 0 ? (
                     <div className="text-center py-6 text-gray-400 font-bold text-sm">Сегодня еще нет закрытых чеков</div>
                   ) : (
                     <div className="divide-y max-h-80 overflow-y-auto">
                       {orders.filter(o => o.status === 'closed').map(order => (
-                        <div key={order.id} className="py-2.5 flex justify-between items-center text-sm">
-                          <div>
-                            <span className="font-black text-gray-900">{order.table}</span>
-                            <span className="text-xs text-gray-400 ml-2">({order.waiter})</span>
-                            <div className="text-[10px] text-gray-400">Закрыт в: {order.closedTime || order.time}</div>
+                        <div key={order.id} className="py-2.5 text-sm">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="font-black text-gray-900">{order.table}</span>
+                              <span className="text-xs text-gray-400 ml-2">({order.waiter})</span>
+                              <div className="text-[10px] text-gray-400">Закрыт в: {order.closedTime || order.time}</div>
+                            </div>
+                            <span className="font-black text-emerald-600">+{order.total} сом</span>
                           </div>
-                          <span className="font-black text-emerald-600">+{order.total} сом</span>
+                          <div className="mt-1.5 pl-1 space-y-0.5">
+                            {aggregateByDish(order.items || []).map((item, idx) => (
+                              <div key={idx} className="text-[11px] text-gray-500 flex justify-between">
+                                <span>{item.quantity}× {item.name}</span>
+                                <span>{item.price * item.quantity} с</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
