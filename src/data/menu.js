@@ -18,13 +18,18 @@ export const menuData = [
   
   // Бургеры
   { id: 'b1_gov', name: 'Классический Бургер (Говядина)', price: 170, category: 'Бургеры', dept: departments.FASTFOOD },
-  { id: 'b1_kur', name: 'Классический Бургер (Курица)', price: 190, category: 'Бургеры', dept: departments.FASTFOOD },
+  { id: 'b2_gov', name: 'Классический Бургер (Двойная Говядина)', price: 190, category: 'Бургеры', dept: departments.FASTFOOD },
+  { id: 'b1_kur', name: 'Классический Бургер (Курица)', price: 170, category: 'Бургеры', dept: departments.FASTFOOD },
+  { id: 'b2_kur', name: 'Классический Бургер (Двойная Курица)', price: 190, category: 'Бургеры', dept: departments.FASTFOOD },
   { id: 'b2', name: 'Бургер Ассорти', price: 190, category: 'Бургеры', dept: departments.FASTFOOD },
   { id: 'b3', name: 'Сырный Бургер', price: 190, category: 'Бургеры', dept: departments.FASTFOOD },
   
   // Хот-доги
   { id: 'hd1', name: 'Хот Дог', price: 100, category: 'Хот-доги', dept: departments.FASTFOOD },
   { id: 'hd2', name: 'Двойной Хот Дог', price: 120, category: 'Хот-доги', dept: departments.FASTFOOD },
+
+  // Сэндвичи
+  { id: 'cs1', name: 'Клаб Сэндвич', price: 300, category: 'Сэндвичи', dept: departments.FASTFOOD },
 
   // ==========================================
   //               СУШИ И ПИЦЦА
@@ -58,6 +63,11 @@ export const menuData = [
   { id: 'z5', name: 'Запеченный Курица', price: 280, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
   { id: 'z6', name: 'Киото Острый', price: 250, category: 'Запеченные роллы', dept: departments.SUSHI_PIZZA },
 
+  // Суши-бургеры
+  { id: 'sb1', name: 'Суши Бургер с Лососем', price: 370, category: 'Суши-бургеры', dept: departments.SUSHI_PIZZA },
+  { id: 'sb2', name: 'Суши Бургер с Курицей', price: 330, category: 'Суши-бургеры', dept: departments.SUSHI_PIZZA },
+
+
   // Пицца
   { id: 'p1', name: 'Пицца Двойная Пепперони', price: 350, category: 'Пицца', dept: departments.SUSHI_PIZZA },
   { id: 'p2', name: 'Пицца Пепперони', price: 300, category: 'Пицца', dept: departments.SUSHI_PIZZA },
@@ -66,11 +76,19 @@ export const menuData = [
   { id: 'p5', name: 'Пицца с Курицей', price: 300, category: 'Пицца', dept: departments.SUSHI_PIZZA },
   { id: 'p6', name: 'Пицца Маргарита', price: 300, category: 'Пицца', dept: departments.SUSHI_PIZZA },
 
+  // Закуски
+  { id: 'fr1', name: 'Картофель Фри (Маленькая)', price: 90, category: 'Закуски', dept: departments.SUSHI_PIZZA },
+  { id: 'fr2', name: 'Картофель Фри (Большая)', price: 130, category: 'Закуски', dept: departments.SUSHI_PIZZA },
+  { id: 'ng1', name: 'Наггетсы', price: 180, category: 'Закуски', dept: departments.SUSHI_PIZZA },
+
+
   // Соусы
   { id: 'sau1', name: 'Соус Кетчуп', price: 20, category: 'Соусы', dept: departments.SUSHI_PIZZA },
   { id: 'sau2', name: 'Чесночный Соус', price: 20, category: 'Соусы', dept: departments.SUSHI_PIZZA },
   { id: 'sau3', name: 'Соус Терияки', price: 20, category: 'Соусы', dept: departments.SUSHI_PIZZA },
   { id: 'sau4', name: 'Сырный Соус', price: 20, category: 'Соусы', dept: departments.SUSHI_PIZZA },
+
+  
 
   // ==========================================
   //                 БАРИСТА
@@ -80,7 +98,7 @@ export const menuData = [
   { id: 'ic_gen_50', name: 'Мороженое (Малое)', price: 50, category: 'Мороженое', dept: departments.BARISTA },
   { id: 'ic_gen_70', name: 'Мороженое (Среднее)', price: 70, category: 'Мороженое', dept: departments.BARISTA },
   { id: 'ic_gen_100', name: 'Мороженое (Большое)', price: 100, category: 'Мороженое', dept: departments.BARISTA },
-  { id: 'ic_fruit', name: 'Фруктовое Мороженое', price: 100, category: 'Мороженое', dept: departments.BARISTA },
+  { id: 'ic_fruit', name: 'Фруктовое Мороженое', price: 150, category: 'Мороженое', dept: departments.BARISTA },
 
   // Шариковое мороженое из основного буклета
   { id: 'ic1', name: 'Шариковое Мороженое (Банан)', price: 50, category: 'Мороженое', dept: departments.BARISTA },
