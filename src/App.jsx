@@ -5,8 +5,8 @@ import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc } from 'fireb
 
 const USERS_DB = [
   { id: 'admin', name: 'Администратор', role: 'admin', pin: '0000' },
-  { id: 'w1', name: 'ГУЛБАРА(официант)', role: 'waiter', pin: '1111' },
-  { id: 'w2', name: 'АЗИЗА (официант)', role: 'waiter', pin: '2222' },
+  { id: 'w1', name: 'АРУУКЕ(официант)', role: 'waiter', pin: '1111' },
+  { id: 'w2', name: 'ЭЛИЗА (официант)', role: 'waiter', pin: '2222' },
   { id: 'w3', name: 'ГУЛНАРА (официант)', role: 'waiter', pin: '3333' },
   { id: 'k1', name: 'АХМАДИЛЛО (Пицца и Суши)', role: 'kitchen_sushi', pin: '4444', dept: departments.SUSHI_PIZZA },
   { id: 'k2', name: 'ХАМИД (Бар)', role: 'kitchen_barista', pin: '5555', dept: departments.BARISTA },
