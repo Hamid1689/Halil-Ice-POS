@@ -113,6 +113,8 @@ export const menuData = [
   { id: 'gv_25', name: 'Газ Вода (стакан 0,35л)', price: 25, category: 'Напитки', dept: departments.BARISTA },
   { id: 'gv_50', name: 'Газ Вода ( 1л)', price: 50, category: 'Напитки', dept: departments.BARISTA },
   { id: 'co_100', name: 'Коктейль', price: 100, category: 'Напитки', dept: departments.BARISTA },
+  { id: 'cof', name: 'Кофе', price: 50, category: 'Напитки', dept: departments.BARISTA },
+  { id: 'tea', name: 'Чай', price: 20, category: 'Напитки', dept: departments.BARISTA },
   { id: 'water_70', name: 'Вода 0,5л', price: 70, category: 'Напитки', dept: departments.BARISTA },
   { id: 'Water_110', name: 'Вода 1л', price: 110, category: 'Напитки', dept: departments.BARISTA },
 
@@ -129,5 +131,14 @@ export const menuData = [
   { id: 'm5_st', name: 'Мохито Малиновый (Стакан)', price: 100, category: 'Мохито', dept: departments.BARISTA },
   { id: 'm5_1l', name: 'Мохито Малиновый (1л)', price: 200, category: 'Мохито', dept: departments.BARISTA },
   { id: 'm6_st', name: 'Мохито Манго (Стакан)', price: 100, category: 'Мохито', dept: departments.BARISTA },
-  { id: 'm6_1l', name: 'Мохито Манго (1л)', price: 200, category: 'Мохито', dept: departments.BARISTA }
+  { id: 'm6_1l', name: 'Мохито Манго (1л)', price: 200, category: 'Мохито', dept: departments.BARISTA },
+
+
+  // десерты
+  { id: 'ds', name: 'Сан Себастьян', price: 250, category: 'Десерты', dept: departments.BARISTA },
+  { id: 'ds_2', name: 'Панкейк', price: 180, category: 'Десерты', dept: departments.BARISTA },
+  { id: 'ds_3', name: 'Сникерс', price: 150, category: 'Десерты', dept: departments.BARISTA },
+  { id: 'ds_4', name: 'Медовик', price: 140, category: 'Десерты', dept: departments.BARISTA }
+
+
 ];
