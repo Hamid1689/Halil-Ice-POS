@@ -1,20 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { menuData, departments } from './data/menu';
-import { db, messagingPromise } from './firebase';
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
-import { getToken } from 'firebase/messaging';
-
-// Вставь сюда VAPID-ключ из Firebase Console → Project settings → Cloud Messaging → Web Push certificates
-const VAPID_KEY = 'BPFGyl4Z5kJY1MQSTT7nnZ6-409VfGk5xjqt0p1JFkuKebRE4yZ_hJ49xqVD3sU7RdOc9gmsIvsVcMYiAUOIY7U';
-
-// Отправка push через нашу серверную функцию /api/send-notification (не блокирует основной поток, ошибки не критичны)
-const sendPush = (payload) => {
-  fetch('/api/send-notification', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  }).catch(err => console.error('Push не отправлен:', err));
-};
+import { db } from './firebase';
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 const USERS_DB = [
   { id: 'admin', name: 'Администратор', role: 'admin', pin: '0000' },
@@ -156,47 +143,11 @@ export default function App() {
     };
   }, []);
 
-  // Запрашиваем разрешение на push-уведомления и сохраняем токен устройства в Firestore,
-  // чтобы серверная функция знала, куда слать уведомление для этого цеха/официанта
+  // Запрашиваем разрешение на системные уведомления браузера (для звука/баннера при открытой вкладке)
   useEffect(() => {
-    if (!currentUser || !('Notification' in window)) return;
-
-    const registerDevice = async () => {
-      try {
-        if (Notification.permission === 'default') {
-          await Notification.requestPermission();
-        }
-        if (Notification.permission !== 'granted') return;
-
-        const messaging = await messagingPromise;
-        if (!messaging) return;
-
-        let swRegistration;
-        if ('serviceWorker' in navigator) {
-          swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        }
-
-        const token = await getToken(messaging, {
-          vapidKey: VAPID_KEY,
-          serviceWorkerRegistration: swRegistration
-        });
-
-        if (token) {
-          await setDoc(doc(db, 'deviceTokens', token), {
-            token,
-            role: currentUser.role,
-            dept: currentUser.dept || null,
-            waiterName: currentUser.role === 'waiter' ? currentUser.name : null,
-            userId: currentUser.id,
-            updatedAt: Date.now()
-          });
-        }
-      } catch (err) {
-        console.error('Не удалось зарегистрировать устройство для push:', err);
-      }
-    };
-
-    registerDevice();
+    if (currentUser && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
   }, [currentUser]);
 
   // Детектор новых событий: новый заказ у кухни / готовность блюда у официанта — звук + всплывашка + системное уведомление
@@ -298,17 +249,10 @@ export default function App() {
   // Кухня отмечает "Готово" — теперь по конкретной партии (строке), а не по всему цеху разом
   const completeLineItem = async (order, lineId) => {
     try {
-      const completedItem = order.items.find(i => i.lineId === lineId);
       const updatedItems = order.items.map(i =>
         i.lineId === lineId ? { ...i, status: 'done', doneAt: Date.now() } : i
       );
       await updateDoc(doc(db, 'orders', order.id), { items: updatedItems });
-      sendPush({
-        targetWaiterName: order.waiter,
-        notifyAdmins: true,
-        title: '✅ Готово',
-        body: `${order.table} — ${completedItem?.name || 'блюдо'} готово`
-      });
     } catch (error) {
       console.error("Ошибка:", error);
     }
@@ -491,10 +435,6 @@ export default function App() {
           lastEditedAt: Date.now(),
           lastEditedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
-        const newDepts = [...new Set(newLines.map(i => i.dept))];
-        newDepts.forEach(dept => {
-          sendPush({ targetDept: dept, title: '➕ Дозаказ', body: `${existingOrder?.table || selectedTable} — дозаказ` });
-        });
       } catch (error) {
         console.error("Ошибка Firebase:", error);
         alert("⚠️ Ошибка сети при отправке заказа! Проверьте интернет.");
@@ -530,10 +470,6 @@ export default function App() {
 
       try {
         await addDoc(collection(db, 'orders'), newOrder);
-        const involvedDepts = [...new Set(finalItems.map(i => i.dept))];
-        involvedDepts.forEach(dept => {
-          sendPush({ targetDept: dept, title: '🔔 Новый заказ', body: `${selectedTable} — новый заказ` });
-        });
       } catch (error) {
         console.error("Ошибка Firebase:", error);
         alert("⚠️ Ошибка сети при отправке заказа! Проверьте интернет.");
