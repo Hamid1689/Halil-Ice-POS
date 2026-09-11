@@ -1,7 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { menuData, departments } from './data/menu';
-import { db } from './firebase';
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db, messagingPromise } from './firebase';
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { getToken } from 'firebase/messaging';
+
+// Вставь сюда VAPID-ключ из Firebase Console → Project settings → Cloud Messaging → Web Push certificates
+const VAPID_KEY = 'BPFGyl4Z5kJY1MQSTT7nnZ6-409VfGk5xjqt0p1JFkuKebRE4yZ_hJ49xqVD3sU7RdOc9gmsIvsVcMYiAUOIY7U';
+
+// Отправка push через нашу серверную функцию /api/send-notification (не блокирует основной поток, ошибки не критичны)
+const sendPush = (payload) => {
+  fetch('/api/send-notification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(err => console.error('Push не отправлен:', err));
+};
 
 const USERS_DB = [
   { id: 'admin', name: 'Администратор', role: 'admin', pin: '0000' },
@@ -13,12 +26,14 @@ const USERS_DB = [
   { id: 'k3', name: 'НОДИРБЕК (Фастфуд)', role: 'kitchen_fastfood', pin: '6666', dept: departments.FASTFOOD },
 ];
 
+// Уникальный id для каждой партии/строки заказа (не для блюда, а для конкретной поставки блюда)
 const uid = () => `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
+// Схлопывает партии в одну строку по блюду+заметке — для админа/официанта, которым важно общее количество
 const aggregateByDish = (items) => {
   const map = new Map();
   (items || []).forEach(item => {
-    const key = item.dishId + '|' + (item.comment || ''); 
+    const key = item.dishId + '|' + (item.comment || '');
     if (map.has(key)) {
       map.get(key).quantity += item.quantity;
     } else {
@@ -28,6 +43,7 @@ const aggregateByDish = (items) => {
   return Array.from(map.values());
 };
 
+// Статус цеха по конкретному заказу: pending (есть что готовить) | ready (есть готовое, не забрано) | picked_up (всё забрано) | null (цех не участвует)
 const getDeptStatus = (items, dept) => {
   const deptItems = (items || []).filter(i => i.dept === dept);
   if (deptItems.length === 0) return null;
@@ -36,39 +52,77 @@ const getDeptStatus = (items, dept) => {
   return 'picked_up';
 };
 
+// Синтезированный звуковой сигнал (без внешних файлов — работает всегда, даже офлайн)
+let sharedAudioCtx = null;
+const playNotificationSound = () => {
+  try {
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+    const ctx = sharedAudioCtx;
+    const beep = (freq, startDelay, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      const startTime = ctx.currentTime + startDelay;
+      osc.frequency.setValueAtTime(freq, startTime);
+      gain.gain.setValueAtTime(0.35, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+    beep(880, 0, 0.35);
+    beep(1160, 0.18, 0.35);
+  } catch (e) {
+    console.error('Не удалось воспроизвести звук:', e);
+  }
+};
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(USERS_DB[0].id);
   const [pinInput, setPinInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
+  // Навигация: 'tables' | 'order' | 'monitor' | 'expenses' | 'report' | 'admin_dept_...'
   const [waiterScreen, setWaiterScreen] = useState('tables');
   
+  // Состояния для чека и заказа
   const [activeDept, setActiveDept] = useState(departments.FASTFOOD);
   const [selectedCategory, setSelectedCategory] = useState('Все');
   const [cart, setCart] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null); 
   const [activeOrderId, setActiveOrderId] = useState(null); 
   
+  // Поиск и фильтрация столов
   const [tableSearchQuery, setTableSearchQuery] = useState('');
-  const [tableFilterType, setTableFilterType] = useState('ALL');
+  const [tableFilterType, setTableFilterType] = useState('ALL'); // 'ALL' | 'OCCUPIED' | 'FREE' | 'READY'
 
+  // Окно просмотра счета (списка блюд) для оплаты
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
 
+  // Состояние всплывающих окон
   const [isCartModalOpen, setIsCartModalOpen] = useState(false);
   const [isConfirmSendModalOpen, setIsConfirmSendModalOpen] = useState(false);
 
+  // Редактирование заметок в чеке
   const [editingCommentItemId, setEditingCommentItemId] = useState(null);
   const [tempCommentText, setTempCommentText] = useState('');
 
+  // Состояния для расходов
   const [expenses, setExpenses] = useState([]);
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseComment, setExpenseComment] = useState('');
 
+  // Облачные заказы Firebase
   const [orders, setOrders] = useState([]);
   const [longPressTimer, setLongPressTimer] = useState(null);
 
-  const [kitchenViewMode, setKitchenViewMode] = useState('own');
+  // Взаимный просмотр цехов: суши-повар видит фастфуд и наоборот
+  const [kitchenViewMode, setKitchenViewMode] = useState('own'); // 'own' | 'other'
   const KITCHEN_PARTNER_DEPT = {
     kitchen_sushi: departments.FASTFOOD,
     kitchen_fastfood: departments.SUSHI_PIZZA,
@@ -76,6 +130,13 @@ export default function App() {
 
   const tables = Array.from({ length: 23 }, (_, i) => `Стол ${i + 1}`).concat('С собой');
 
+  // Уведомления со звуком (новый заказ у кухни / готовность у официанта)
+  const [notifToast, setNotifToast] = useState(null);
+  const seenPendingRef = useRef(new Set());
+  const seenReadyRef = useRef(new Set());
+  const isFirstOrdersLoad = useRef(true);
+
+  // Подписка на заказы и расходы в реальном времени
   useEffect(() => {
     const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
       const ordersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -94,6 +155,121 @@ export default function App() {
       unsubExpenses();
     };
   }, []);
+
+  // Запрашиваем разрешение на push-уведомления и сохраняем токен устройства в Firestore,
+  // чтобы серверная функция знала, куда слать уведомление для этого цеха/официанта
+  useEffect(() => {
+    if (!currentUser || !('Notification' in window)) return;
+
+    const registerDevice = async () => {
+      try {
+        if (Notification.permission === 'default') {
+          await Notification.requestPermission();
+        }
+        if (Notification.permission !== 'granted') return;
+
+        const messaging = await messagingPromise;
+        if (!messaging) return;
+
+        let swRegistration;
+        if ('serviceWorker' in navigator) {
+          swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        }
+
+        const token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: swRegistration
+        });
+
+        if (token) {
+          await setDoc(doc(db, 'deviceTokens', token), {
+            token,
+            role: currentUser.role,
+            dept: currentUser.dept || null,
+            waiterName: currentUser.role === 'waiter' ? currentUser.name : null,
+            userId: currentUser.id,
+            updatedAt: Date.now()
+          });
+        }
+      } catch (err) {
+        console.error('Не удалось зарегистрировать устройство для push:', err);
+      }
+    };
+
+    registerDevice();
+  }, [currentUser]);
+
+  // Детектор новых событий: новый заказ у кухни / готовность блюда у официанта — звук + всплывашка + системное уведомление
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let kitchenDepts = [];
+    if (currentUser.role.startsWith('kitchen_')) {
+      kitchenDepts = [currentUser.dept];
+      if (KITCHEN_PARTNER_DEPT[currentUser.role]) kitchenDepts.push(KITCHEN_PARTNER_DEPT[currentUser.role]);
+    }
+
+    const currentPendingIds = new Set();
+    const currentReadySignals = new Set();
+
+    orders.forEach(order => {
+      if (order.status !== 'open') return;
+      (order.items || []).forEach(item => {
+        if (item.status === 'pending') currentPendingIds.add(item.lineId);
+      });
+      const involvedDepts = [...new Set((order.items || []).map(i => i.dept))];
+      involvedDepts.forEach(d => {
+        if (getDeptStatus(order.items, d) === 'ready') {
+          currentReadySignals.add(order.id + '|' + d);
+        }
+      });
+    });
+
+    if (isFirstOrdersLoad.current) {
+      seenPendingRef.current = currentPendingIds;
+      seenReadyRef.current = currentReadySignals;
+      isFirstOrdersLoad.current = false;
+      return;
+    }
+
+    const fireNotification = (text) => {
+      playNotificationSound();
+      setNotifToast(text);
+      setTimeout(() => setNotifToast(null), 4000);
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        try { new Notification('HALIL ICE POS', { body: text }); } catch (e) { /* ignore */ }
+      }
+    };
+
+    if (kitchenDepts.length > 0) {
+      let newTable = null;
+      orders.forEach(order => {
+        if (order.status !== 'open' || newTable) return;
+        (order.items || []).forEach(item => {
+          if (item.status === 'pending' && kitchenDepts.includes(item.dept) && !seenPendingRef.current.has(item.lineId)) {
+            newTable = order.table;
+          }
+        });
+      });
+      if (newTable) fireNotification(`🔔 Новый заказ: ${newTable}`);
+    }
+
+    if (currentUser.role === 'waiter' || currentUser.role === 'admin') {
+      let newReady = null;
+      currentReadySignals.forEach(sig => {
+        if (newReady || seenReadyRef.current.has(sig)) return;
+        const [orderId, dept] = sig.split('|');
+        const ord = orders.find(o => o.id === orderId);
+        if (ord && (currentUser.role === 'admin' || ord.waiter === currentUser.name)) {
+          newReady = { table: ord.table, dept };
+        }
+      });
+      if (newReady) fireNotification(`✅ Готово: ${newReady.table} (${newReady.dept})`);
+    }
+
+    seenPendingRef.current = currentPendingIds;
+    seenReadyRef.current = currentReadySignals;
+  }, [orders, currentUser]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -119,17 +295,26 @@ export default function App() {
     setViewingBillOrder(null);
   };
 
+  // Кухня отмечает "Готово" — теперь по конкретной партии (строке), а не по всему цеху разом
   const completeLineItem = async (order, lineId) => {
     try {
+      const completedItem = order.items.find(i => i.lineId === lineId);
       const updatedItems = order.items.map(i =>
         i.lineId === lineId ? { ...i, status: 'done', doneAt: Date.now() } : i
       );
       await updateDoc(doc(db, 'orders', order.id), { items: updatedItems });
+      sendPush({
+        targetWaiterName: order.waiter,
+        notifyAdmins: true,
+        title: '✅ Готово',
+        body: `${order.table} — ${completedItem?.name || 'блюдо'} готово`
+      });
     } catch (error) {
       console.error("Ошибка:", error);
     }
   };
 
+  // Официант забирает с раздачи всё готовое по конкретному цеху одним разом
   const handleWaiterPickUp = async (order, deptName) => {
     try {
       const updatedItems = order.items.map(i =>
@@ -141,6 +326,7 @@ export default function App() {
     }
   };
 
+  // При клике на стол
   const handleTableClick = (tableName, activeOrder) => {
     if (activeOrder) {
       setViewingBillOrder(activeOrder);
@@ -153,6 +339,8 @@ export default function App() {
     }
   };
 
+  // Переход в редактирование заказа из окна счета — в корзину подгружается СХЛОПНУТЫЙ по блюдам список,
+  // чтобы официанту было удобно менять количество; при отправке система сама разложит разницу по партиям
   const handleEditOrderFromBill = (order) => {
     setSelectedTable(order.table);
     const agg = aggregateByDish(order.items || []);
@@ -217,6 +405,7 @@ export default function App() {
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  // Отправка заказа на кухню — создаёт новый чек (партия №1) либо докладывает РАЗНИЦУ отдельной партией
   const executeSendOrderToKitchen = async () => {
     if (!selectedTable || cart.length === 0) return;
 
@@ -246,6 +435,7 @@ export default function App() {
         const delta = cartItem.quantity - oldQty;
 
         if (delta > 0) {
+          // Новая порция — отдельная партия, не трогает уже готовящееся/готовое
           newLines.push({
             lineId: uid(),
             dishId: cartItem.id,
@@ -259,6 +449,7 @@ export default function App() {
             status: 'pending'
           });
         } else if (delta < 0) {
+          // Уменьшили количество — снимаем в первую очередь с ещё не приготовленных партий этого блюда
           let toRemove = -delta;
           const candidates = workingItems
             .filter(it => it.dishId === cartItem.id && (it.comment || '') === (cartItem.comment || ''))
@@ -277,6 +468,7 @@ export default function App() {
         }
       });
 
+      // Блюдо целиком убрали из чека — убираем все его партии
       const cartKeys = new Set(cart.map(ci => ci.id + '|' + (ci.comment || '')));
       Object.keys(oldAgg).forEach(key => {
         if (!cartKeys.has(key)) {
@@ -298,6 +490,10 @@ export default function App() {
           total,
           lastEditedAt: Date.now(),
           lastEditedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        const newDepts = [...new Set(newLines.map(i => i.dept))];
+        newDepts.forEach(dept => {
+          sendPush({ targetDept: dept, title: '➕ Дозаказ', body: `${existingOrder?.table || selectedTable} — дозаказ` });
         });
       } catch (error) {
         console.error("Ошибка Firebase:", error);
@@ -334,6 +530,10 @@ export default function App() {
 
       try {
         await addDoc(collection(db, 'orders'), newOrder);
+        const involvedDepts = [...new Set(finalItems.map(i => i.dept))];
+        involvedDepts.forEach(dept => {
+          sendPush({ targetDept: dept, title: '🔔 Новый заказ', body: `${selectedTable} — новый заказ` });
+        });
       } catch (error) {
         console.error("Ошибка Firebase:", error);
         alert("⚠️ Ошибка сети при отправке заказа! Проверьте интернет.");
@@ -341,6 +541,7 @@ export default function App() {
     }
   };
 
+  // Мгновенное закрытие окна и расчет стола
   const closeOrderDirectly = async (orderToClose) => {
     if (!orderToClose) return;
     if (window.confirm(`💰 Рассчитать гостей и очистить ${orderToClose.table}?\nИтого к оплате: ${orderToClose.total} сом`)) {
@@ -365,6 +566,7 @@ export default function App() {
     }
   };
 
+  // Добавление расхода
   const handleAddExpense = async (e) => {
     e.preventDefault();
     if (!expenseAmount || !expenseComment) {
@@ -426,6 +628,7 @@ export default function App() {
     }).length;
   };
 
+  // Фильтрация столов по поиску и кнопкам
   const filteredTables = tables.filter(tName => {
     const activeOrder = orders.find(o => o.table === tName && o.status === 'open');
     
@@ -459,6 +662,9 @@ export default function App() {
   const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const netCash = totalRevenue - totalExpenses;
 
+  // =========================================================
+  // ЭКРАН ВХОДА
+  // =========================================================
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center px-4">
@@ -484,8 +690,18 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 text-gray-800 font-sans overflow-hidden">
+    <>
+    <style>{`@page { size: 80mm auto; margin: 2mm 0; } @media print { .app-root { display: none !important; } body { margin: 0; } }`}</style>
+    <div className="app-root flex flex-col h-screen bg-gray-100 text-gray-800 font-sans overflow-hidden">
+
+      {/* ВСПЛЫВАЮЩЕЕ УВЕДОМЛЕНИЕ (звук + баннер) */}
+      {notifToast && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl font-black text-sm border-2 border-emerald-400 animate-bounce">
+          {notifToast}
+        </div>
+      )}
       
+      {/* ВЕРХНЯЯ ШАПКА */}
       <header className="bg-gray-900 text-white px-4 py-3 flex flex-wrap justify-between items-center shadow-md z-10 shrink-0 gap-2">
         <div>
           <h1 className="text-sm font-black tracking-wide">HALIL ICE POS</h1>
@@ -531,6 +747,7 @@ export default function App() {
 
       <div className="flex-1 flex overflow-hidden relative">
         
+        {/* ИНТЕРФЕЙС ОФИЦИАНТА И АДМИНА (ЗАЛ) */}
         {(currentUser.role === 'waiter' || currentUser.role === 'admin') && !activeKitchenDept && (
           <>
             {waiterScreen === 'tables' && (
@@ -940,6 +1157,7 @@ export default function App() {
           </>
         )}
 
+        {/* ИНТЕРФЕЙС КУХНИ / БАРА */}
         {activeKitchenDept && (() => {
           const deptOrders = orders.filter(order => 
             order.status === 'open' &&
@@ -1025,6 +1243,7 @@ export default function App() {
 
       </div>
 
+      {/* ОКНО: «СЧЕТ ГОСТЯ / СПИСОК БЛЮД» С МГНОВЕННЫМ ЗАКРЫТИЕМ */}
       {viewingBillOrder && (
         <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
@@ -1076,6 +1295,13 @@ export default function App() {
               )}
 
               <button
+                onClick={() => window.print()}
+                className="w-full bg-gray-700 hover:bg-gray-800 text-white py-3 rounded-xl font-bold text-xs shadow transition-all flex items-center justify-center gap-1"
+              >
+                🖨️ Распечатать чек
+              </button>
+
+              <button
                 onClick={() => handleEditOrderFromBill(viewingBillOrder)}
                 className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 rounded-xl font-bold text-xs shadow transition-all"
               >
@@ -1087,6 +1313,7 @@ export default function App() {
         </div>
       )}
 
+      {/* ОКНО ЧЕКА ПРИ РЕДАКТИРОВАНИИ */}
       {isCartModalOpen && (
         <div className="fixed inset-0 bg-black/70 z-40 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
@@ -1144,6 +1371,7 @@ export default function App() {
         </div>
       )}
 
+      {/* ОКНО РЕДАКТИРОВАНИЯ ЗАМЕТКИ */}
       {editingCommentItemId && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
@@ -1158,5 +1386,60 @@ export default function App() {
       )}
 
     </div>
+
+    {/* ЧЕК ДЛЯ ПЕЧАТИ — виден только при печати (Ctrl+P / кнопка "Распечатать чек"), формат под ленту 80мм */}
+    {viewingBillOrder && (
+      <div id="receipt-print-area" className="hidden print:block bg-white text-black" style={{ width: '72mm', margin: '0 auto', fontFamily: "'Courier New', monospace" }}>
+        
+        <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 900, letterSpacing: '1px' }}>HALIL ICE</div>
+          <div style={{ fontSize: '10px', fontWeight: 700 }}>Фастфуд · Суши и Пицца · Бариста</div>
+        </div>
+
+        <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
+
+        <div style={{ fontSize: '11px', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
+          <span>{viewingBillOrder.table}</span>
+          <span>{new Date().toLocaleDateString('ru-RU')} {viewingBillOrder.closedTime || viewingBillOrder.time}</span>
+        </div>
+        <div style={{ fontSize: '10px' }}>Официант: {viewingBillOrder.waiter}</div>
+
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+
+        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+          <tbody>
+            {aggregateByDish(viewingBillOrder.items || []).map((item, idx) => (
+              <React.Fragment key={idx}>
+                <tr>
+                  <td colSpan={3} style={{ fontWeight: 700, paddingTop: '3px' }}>{item.name}</td>
+                </tr>
+                <tr>
+                  <td style={{ width: '40%' }}>{item.quantity} x {item.price}</td>
+                  <td style={{ width: '20%' }}></td>
+                  <td style={{ width: '40%', textAlign: 'right', fontWeight: 700 }}>{item.quantity * item.price} сом</td>
+                </tr>
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 900 }}>
+          <span>ИТОГО</span>
+          <span>{viewingBillOrder.total} сом</span>
+        </div>
+
+        <div style={{ borderTop: '1px dashed #000', margin: '8px 0 4px' }} />
+
+        <div style={{ textAlign: 'center', fontSize: '10px', fontWeight: 700, marginTop: '4px' }}>
+          Спасибо за заказ!
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '9px', marginTop: '2px' }}>
+          Ждём вас снова 🙏
+        </div>
+      </div>
+    )}
+    </>
   );
 }
