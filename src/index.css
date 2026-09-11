@@ -111,22 +111,30 @@ code {
   background: var(--code-bg);
 }
 
-/* Сброс высоты и полей специально для печати чеков */
+/* Исправленный блок стилей печати чека */
 @media print {
   @page {
     margin: 0;
     size: auto;
   }
 
-  html, body, #root {
-    min-height: 0 !important;
+  html, body, #root, div, section, main {
     height: auto !important;
+    min-height: 0 !important;
     max-height: none !important;
+    overflow: visible !important;
+    width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
-    width: 100% !important;
+    box-shadow: none !important;
     background: #fff !important;
     color: #000 !important;
+  }
+
+  #root {
+    max-width: 72mm !important;
+    display: block !important;
+    text-align: left !important;
   }
 }
