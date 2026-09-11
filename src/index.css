@@ -110,3 +110,23 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Сброс высоты и полей специально для печати чеков */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  html, body, #root {
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    width: 100% !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+}
