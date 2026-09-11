@@ -110,36 +110,3 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
-
-/* Полная развертка высоты для чекового принтера */
-@media print {
-  @page {
-    margin: 0;
-    size: auto;
-  }
-
-  *, *::before, *::after {
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    overflow: visible !important;
-    flex: none !important;
-  }
-
-  html, body {
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
-    color: #000 !important;
-  }
-
-  #root {
-    max-width: 72mm !important;
-    width: 72mm !important;
-    display: block !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    text-align: left !important;
-  }
-}

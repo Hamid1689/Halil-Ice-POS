@@ -1323,67 +1323,56 @@ export default function App() {
 
     </div>
 
-    {/* ЧЕК ДЛЯ ПЕЧАТИ — виден только при печати, оптимизирован под ленту 80мм */}
+    {/* ЧЕК ДЛЯ ПЕЧАТИ — виден только при печати (Ctrl+P / кнопка "Распечатать чек"), формат под ленту 80мм */}
     {viewingBillOrder && (
-      <div id="receipt-print-area" className="hidden print:block bg-white text-black" style={{ width: '72mm', margin: '0 auto', fontFamily: "'Courier New', monospace", fontSize: '11px', lineHeight: '1.1' }}>
+      <div id="receipt-print-area" className="hidden print:block bg-white text-black" style={{ width: '72mm', margin: '0 auto', fontFamily: "'Courier New', monospace" }}>
         
-        {/* Стили для отключения полей браузера и колонтитулов при печати */}
-        <style dangerouslySetInnerHTML={{__html: `
-          @page {
-            size: 80mm auto !important;
-            margin: 0mm !important;
-          }
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-        `}} />
-
-        <div style={{ textAlign: 'center', marginBottom: '2px' }}>
-          <div style={{ fontSize: '15px', fontWeight: 900, letterSpacing: '0.5px' }}>HALIL ICE</div>
-          <div style={{ fontSize: '9px', fontWeight: 700 }}>Фастфуд · Суши и Пицца · Бариста</div>
+        <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 900, letterSpacing: '1px' }}>HALIL ICE</div>
+          <div style={{ fontSize: '10px', fontWeight: 700 }}>Фастфуд · Суши и Пицца · Бариста</div>
         </div>
 
-        <div style={{ borderTop: '1px dashed #000', margin: '2px 0' }} />
+        <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />
 
-        <div style={{ fontSize: '10px', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
           <span>{viewingBillOrder.table}</span>
           <span>{new Date().toLocaleDateString('ru-RU')} {viewingBillOrder.closedTime || viewingBillOrder.time}</span>
         </div>
         <div style={{ fontSize: '10px' }}>Официант: {viewingBillOrder.waiter}</div>
 
-        <div style={{ borderTop: '1px dashed #000', margin: '2px 0' }} />
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
 
-        <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse' }}>
+        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
           <tbody>
             {aggregateByDish(viewingBillOrder.items || []).map((item, idx) => (
               <React.Fragment key={idx}>
                 <tr>
-                  <td colSpan={2} style={{ fontWeight: 700, paddingTop: '2px' }}>
-                    {item.name}
-                    {item.comment && <span style={{ fontWeight: 400, fontSize: '9px', display: 'block' }}> ({item.comment})</span>}
-                  </td>
+                  <td colSpan={3} style={{ fontWeight: 700, paddingTop: '3px' }}>{item.name}</td>
                 </tr>
                 <tr>
-                  <td style={{ width: '60%', paddingBottom: '2px' }}>{item.quantity} шт × {item.price}</td>
-                  <td style={{ width: '40%', textAlign: 'right', fontWeight: 700, paddingBottom: '2px' }}>{item.quantity * item.price} сом</td>
+                  <td style={{ width: '40%' }}>{item.quantity} x {item.price}</td>
+                  <td style={{ width: '20%' }}></td>
+                  <td style={{ width: '40%', textAlign: 'right', fontWeight: 700 }}>{item.quantity * item.price} сом</td>
                 </tr>
               </React.Fragment>
             ))}
           </tbody>
         </table>
 
-        <div style={{ borderTop: '1px dashed #000', margin: '2px 0' }} />
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 900, padding: '1px 0' }}>
-          <span>ИТОГО:</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 900 }}>
+          <span>ИТОГО</span>
           <span>{viewingBillOrder.total} сом</span>
         </div>
 
-        <div style={{ borderTop: '1px dashed #000', margin: '2px 0' }} />
+        <div style={{ borderTop: '1px dashed #000', margin: '8px 0 4px' }} />
 
-        <div style={{ textAlign: 'center', fontSize: '9px', fontWeight: 700, marginTop: '2px' }}>
-          Спасибо за заказ! Ждём вас снова 🙏
+        <div style={{ textAlign: 'center', fontSize: '10px', fontWeight: 700, marginTop: '4px' }}>
+          Спасибо за заказ!
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '9px', marginTop: '2px' }}>
+          Ждём вас снова 🙏
         </div>
       </div>
     )}
